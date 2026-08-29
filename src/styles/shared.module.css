@@ -1,0 +1,158 @@
+/* Elementi ricorrenti in più viste: tabelle dati, campi, blocchi e cifre.
+   Stanno qui una volta sola invece che copiati in ogni modulo. */
+
+.page {
+  padding: var(--s4) var(--s5);
+  display: grid;
+  gap: var(--s5);
+  align-content: start;
+  /* Oltre questa misura le colonne si allontanano tanto da rendere
+     faticoso associare una riga al suo numero. */
+  max-width: 1040px;
+}
+
+.block {
+  display: grid;
+  gap: var(--s2);
+  align-content: start;
+}
+
+.blockHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  border-top: var(--hairline) solid var(--rule-strong);
+  padding-top: var(--s1);
+}
+
+.blockBody {
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+
+/* --- tabelle --- */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-body);
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper);
+  text-align: left;
+  font-size: var(--t-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink-3);
+  padding: var(--s1) var(--s2) var(--s1) 0;
+  border-bottom: var(--hairline) solid var(--ink);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--s1) var(--s2) var(--s1) 0;
+  border-bottom: var(--hairline) solid var(--rule);
+  vertical-align: baseline;
+}
+
+.table tbody tr:hover td {
+  background: var(--paper-sunken);
+}
+
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--ink-3);
+}
+
+.strong {
+  font-weight: 600;
+}
+
+.negative {
+  color: var(--accent);
+}
+
+/* --- campi --- */
+
+.field {
+  display: grid;
+  gap: var(--s-half);
+}
+
+.label {
+  font-size: var(--t-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--ink-3);
+}
+
+.input,
+.select {
+  padding: var(--s1);
+  border: var(--hairline) solid var(--rule);
+  background: var(--paper-sunken);
+  font-size: var(--t-body);
+  min-width: 0;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s2);
+  flex-wrap: wrap;
+}
+
+/* --- cifre in evidenza --- */
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  border-top: var(--hairline) solid var(--rule);
+  border-left: var(--hairline) solid var(--rule);
+}
+
+.figure {
+  padding: var(--s2);
+  border-right: var(--hairline) solid var(--rule);
+  border-bottom: var(--hairline) solid var(--rule);
+}
+
+.figureValue {
+  font-size: var(--t-h2);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1;
+}
+
+.figureLabel {
+  margin-top: var(--s-half);
+  font-size: var(--t-small);
+  color: var(--ink-3);
+}
+
+.error {
+  color: var(--accent);
+}
+
+.empty {
+  color: var(--ink-3);
+  padding: var(--s2) 0;
+}

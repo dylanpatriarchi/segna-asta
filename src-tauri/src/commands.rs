@@ -4,7 +4,7 @@
 
 use crate::db::queries::{self, NewAuction, PlayerFilter};
 use crate::db::Db;
-use crate::domain::{Auction, Manager, Player, PlayerList};
+use crate::domain::{Auction, AuctionState, Manager, Pick, PickDetail, Player, PlayerList};
 use crate::error::{AppError, Result};
 use crate::import;
 use serde::Serialize;
@@ -116,6 +116,48 @@ pub fn auction(db: State<'_, Db>, id: i64) -> Result<Auction> {
 pub fn managers(db: State<'_, Db>, auction_id: i64) -> Result<Vec<Manager>> {
     let conn = lock(&db)?;
     queries::managers(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn assign_player(
+    db: State<'_, Db>,
+    auction_id: i64,
+    player_id: i64,
+    manager_id: i64,
+    price: i64,
+) -> Result<Pick> {
+    let conn = lock(&db)?;
+    queries::assign_player(&conn, auction_id, player_id, manager_id, price)
+}
+
+#[tauri::command]
+pub fn undo_last_pick(db: State<'_, Db>, auction_id: i64) -> Result<Option<PickDetail>> {
+    let conn = lock(&db)?;
+    queries::undo_last_pick(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn picks(db: State<'_, Db>, auction_id: i64) -> Result<Vec<PickDetail>> {
+    let conn = lock(&db)?;
+    queries::picks(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn auction_state(db: State<'_, Db>, auction_id: i64) -> Result<AuctionState> {
+    let conn = lock(&db)?;
+    queries::auction_state(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn active_auction_id(db: State<'_, Db>) -> Result<Option<i64>> {
+    let conn = lock(&db)?;
+    queries::active_auction_id(&conn)
+}
+
+#[tauri::command]
+pub fn set_active_auction(db: State<'_, Db>, auction_id: i64) -> Result<()> {
+    let conn = lock(&db)?;
+    queries::set_active_auction(&conn, auction_id)
 }
 
 /// Un mutex avvelenato significa che un altro comando è andato in panico:

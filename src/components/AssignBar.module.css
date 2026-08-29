@@ -1,0 +1,43 @@
+/* Sta incollata in fondo alla vista: durante l'asta le mani non devono
+   inseguire un pannello che si sposta. */
+.bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  padding: var(--s2) var(--s5);
+  border-top: var(--hairline) solid var(--ink);
+  background: var(--paper-sunken);
+}
+
+.player {
+  display: grid;
+  gap: 2px;
+  min-width: 200px;
+  flex: 1 1 200px;
+}
+
+.name {
+  font-size: var(--t-lead);
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+}
+
+.price {
+  width: 100px;
+}
+
+.hint {
+  display: grid;
+  gap: 2px;
+  font-size: var(--t-small);
+  padding-bottom: var(--s-half);
+  min-width: 90px;
+}
+
+.actions {
+  display: flex;
+  gap: var(--s1);
+}

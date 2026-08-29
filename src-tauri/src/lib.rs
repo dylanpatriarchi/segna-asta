@@ -29,6 +29,12 @@ pub fn run() {
             commands::auctions,
             commands::auction,
             commands::managers,
+            commands::assign_player,
+            commands::undo_last_pick,
+            commands::picks,
+            commands::auction_state,
+            commands::active_auction_id,
+            commands::set_active_auction,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio dell'applicazione");

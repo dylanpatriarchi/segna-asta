@@ -10,5 +10,13 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+
+/* Le viste dense (listone, sala asta) gestiscono da sé il proprio scroll:
+   qui si dà loro l'altezza rimasta e non si scrolla due volte. */
+.content {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }

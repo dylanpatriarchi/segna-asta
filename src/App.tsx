@@ -12,7 +12,9 @@ export default function App() {
       <Sidebar />
       <main className={styles.main}>
         <PageHeader section={section} />
-        <SectionView section={section} />
+        <div className={styles.content}>
+          <SectionView section={section} />
+        </div>
       </main>
     </div>
   );
