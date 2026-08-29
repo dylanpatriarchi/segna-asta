@@ -1,0 +1,35 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: var(--s1) var(--s2);
+  border: var(--hairline) solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: var(--t-body);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+}
+
+.button:disabled {
+  cursor: default;
+  background: none;
+  color: var(--ink-4);
+  border-color: var(--rule);
+}
+
+.secondary {
+  background: none;
+  color: var(--ink);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--paper-sunken);
+  border-color: var(--ink);
+  color: var(--ink);
+}
