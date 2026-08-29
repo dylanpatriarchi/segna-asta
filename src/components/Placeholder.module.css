@@ -1,0 +1,40 @@
+.placeholder {
+  padding: var(--s5);
+  max-width: 68ch;
+}
+
+.rule {
+  height: var(--hairline);
+  background: var(--rule-strong);
+  margin-bottom: var(--s2);
+}
+
+.title {
+  font-size: var(--t-h3);
+  margin-bottom: var(--s1);
+}
+
+.body {
+  color: var(--ink-2);
+}
+
+.list {
+  margin: var(--s2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--s-half);
+  border-top: var(--hairline) solid var(--rule);
+  padding-top: var(--s2);
+}
+
+.list li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: var(--s1);
+  color: var(--ink-2);
+}
+
+.bullet {
+  color: var(--ink-4);
+}

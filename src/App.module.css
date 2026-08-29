@@ -1,0 +1,14 @@
+.shell {
+  display: grid;
+  grid-template-areas: "sidebar main";
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  height: 100%;
+}
+
+.main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+}

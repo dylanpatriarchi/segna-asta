@@ -1,0 +1,63 @@
+/*
+ * Design tokens — International Style / svizzero.
+ * Griglia a 8px, tipografia come struttura portante, un solo accento.
+ */
+:root {
+  /* Superfici e inchiostro */
+  --paper: #fafaf8;
+  --paper-raised: #ffffff;
+  --paper-sunken: #f2f1ec;
+  --ink: #0a0a0a;
+  --ink-2: #454440;
+  --ink-3: #76746d;
+  --ink-4: #a5a29a;
+
+  /* Filetti: mai ombre, solo linee */
+  --rule: #dedcd5;
+  --rule-strong: #0a0a0a;
+
+  /* Accento: riservato a ciò che è davvero urgente */
+  --accent: #e1120e;
+  --accent-wash: #fdeceb;
+  /* Scostamenti: affare vs pagato troppo */
+  --gain: #1d6f4f;
+  --loss: var(--accent);
+
+  /* Scala spaziale, multipli di 8 (con mezzo passo a 4) */
+  --s-half: 4px;
+  --s1: 8px;
+  --s2: 16px;
+  --s3: 24px;
+  --s4: 32px;
+  --s5: 48px;
+  --s6: 64px;
+  --s7: 96px;
+
+  /* Tipografia */
+  --font-sans: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --t-micro: 10px;
+  --t-small: 11px;
+  --t-body: 13px;
+  --t-lead: 15px;
+  --t-h3: 18px;
+  --t-h2: 24px;
+  --t-h1: 34px;
+  --t-display: 52px;
+
+  --lh-tight: 1.1;
+  --lh-body: 1.5;
+
+  /* Tracking: le maiuscole piccole hanno bisogno d'aria */
+  --tracking-caps: 0.09em;
+  --tracking-tight: -0.02em;
+
+  /* Geometria: angoli quasi vivi, mai morbidi */
+  --radius: 2px;
+  --hairline: 1px;
+
+  /* Larghezze della griglia di layout */
+  --sidebar-w: 232px;
+  --header-h: 88px;
+}

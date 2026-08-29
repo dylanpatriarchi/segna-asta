@@ -1,0 +1,28 @@
+.header {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  align-items: start;
+  gap: var(--s2);
+  padding: var(--s4) var(--s5) var(--s3);
+  border-bottom: var(--hairline) solid var(--rule);
+}
+
+.number {
+  font-size: var(--t-h2);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink-4);
+}
+
+.title {
+  font-size: var(--t-h1);
+  letter-spacing: var(--tracking-tight);
+}
+
+.caption {
+  margin-top: var(--s-half);
+  font-size: var(--t-lead);
+  color: var(--ink-3);
+  max-width: 62ch;
+}
