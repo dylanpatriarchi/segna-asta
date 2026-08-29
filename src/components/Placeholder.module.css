@@ -1,0 +1,25 @@
+.placeholder {
+  padding: var(--s4) var(--s5);
+  max-width: 68ch;
+}
+
+.list {
+  margin: var(--s2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--s-half);
+  border-top: var(--hairline) solid var(--rule-strong);
+  padding-top: var(--s2);
+}
+
+.list li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: var(--s1);
+  color: var(--ink-2);
+}
+
+.bullet {
+  color: var(--ink-4);
+}

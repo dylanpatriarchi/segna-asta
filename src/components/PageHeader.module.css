@@ -1,0 +1,9 @@
+.header {
+  padding: var(--s4) var(--s5) var(--s3);
+  border-bottom: var(--hairline) solid var(--rule);
+}
+
+.title {
+  font-size: var(--t-h1);
+  letter-spacing: var(--tracking-tight);
+}

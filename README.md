@@ -37,3 +37,7 @@ Requisiti: Node 20+, Rust stable, toolchain Tauri per la propria piattaforma.
 `data/quotazioni_fantamaster.xlsx` è il listone di riferimento usato per lo
 sviluppo e per i test di regressione dell'importer: 608 giocatori, 20 squadre,
 ruoli classic P/D/C/A, somma quotazioni 3702.
+
+## Licenza
+
+MIT — vedi [LICENSE](LICENSE).
