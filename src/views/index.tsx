@@ -1,4 +1,5 @@
 import { Placeholder } from "@/components/Placeholder";
+import { Impostazioni } from "./Impostazioni";
 import type { SectionId } from "@/app/navigation";
 
 /**
@@ -40,14 +41,11 @@ const CONTENT: Record<SectionId, string[]> = {
     "Inflazione del mercato durante l'asta",
     "Crediti residui e slot mancanti degli avversari",
   ],
-  impostazioni: [
-    "Crediti, struttura rosa e partecipanti della lega",
-    "Import e aggiornamento del listone da XLSX",
-    "Export CSV/JSON della rosa e backup del database",
-    "Aste archiviate: asta vera, simulazioni, stagioni passate",
-  ],
+  // Impostazioni ha già la sua vista: qui resta solo per completezza del tipo.
+  impostazioni: [],
 };
 
 export function SectionView({ section }: { section: SectionId }) {
+  if (section === "impostazioni") return <Impostazioni />;
   return <Placeholder items={CONTENT[section]} />;
 }
