@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm, open, save } from "@tauri-apps/plugin-dialog";
 import { api, keys, ROLE_LABEL, type ImportReport } from "@/lib/api";
 import { useActiveAuctionId } from "@/lib/auction";
 import { Button } from "@/components/Button";
@@ -78,6 +78,8 @@ export function Impostazioni() {
           </table>
         )}
       </section>
+
+      <BackupBlock />
 
       <section className={shared.block}>
         <div className={shared.blockHead}>
@@ -240,6 +242,80 @@ function NewAuctionForm({ listId }: { listId: number }) {
         {create.isError && <span className={shared.error}>{String(create.error)}</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Copia di sicurezza del database. Il ripristino sovrascrive tutto quello
+ * che c'è adesso, quindi chiede conferma e mette comunque da parte una
+ * copia dello stato attuale prima di procedere.
+ */
+function BackupBlock() {
+  const queryClient = useQueryClient();
+  const [outcome, setOutcome] = useState<string | null>(null);
+
+  const backup = useMutation({
+    mutationFn: async () => {
+      const path = await save({
+        defaultPath: await api.suggestedBackupName(),
+        filters: [{ name: "Backup Segna-Asta", extensions: ["db"] }],
+      });
+      if (path === null) return null;
+      await api.backupDatabase(path);
+      return path;
+    },
+    onSuccess: (path) => setOutcome(path === null ? null : `Backup salvato in ${path}`),
+  });
+
+  const restore = useMutation({
+    mutationFn: async () => {
+      const path = await open({
+        multiple: false,
+        filters: [{ name: "Backup Segna-Asta", extensions: ["db"] }],
+      });
+      if (path === null) return null;
+
+      const confirmed = await confirm(
+        "Il ripristino sostituisce tutto quello che c'è ora: listone, aste, assegnazioni e liste desideri. Una copia dello stato attuale viene comunque messa da parte.",
+        { title: "Ripristinare da questo backup?", kind: "warning" },
+      );
+      if (!confirmed) return null;
+
+      return api.restoreDatabase(path);
+    },
+    onSuccess: (safetyCopy) => {
+      if (safetyCopy === null) return;
+      setOutcome(`Ripristinato. Lo stato precedente è stato salvato in ${safetyCopy}`);
+      // Dopo un ripristino non è più valido niente di quello che è a schermo.
+      void queryClient.invalidateQueries();
+    },
+  });
+
+  return (
+    <section className={shared.block}>
+      <div className={shared.blockHead}>
+        <span className="eyebrow">Backup</span>
+      </div>
+      <p className={shared.blockBody}>
+        Il database sta in un solo file: una copia prima dell'asta è
+        l'assicurazione contro il disco che si rompe la sera sbagliata.
+      </p>
+      <div className={shared.row}>
+        <Button onClick={() => backup.mutate()} disabled={backup.isPending}>
+          {backup.isPending ? "Salvo…" : "Salva un backup…"}
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => restore.mutate()}
+          disabled={restore.isPending}
+        >
+          {restore.isPending ? "Ripristino…" : "Ripristina da backup…"}
+        </Button>
+      </div>
+      {outcome && <p className={shared.muted}>{outcome}</p>}
+      {backup.isError && <p className={shared.error}>{String(backup.error)}</p>}
+      {restore.isError && <p className={shared.error}>{String(restore.error)}</p>}
+    </section>
   );
 }
 

@@ -215,6 +215,13 @@ export const api = {
 
   setBudgetPlan: (auctionId: number, plan: BudgetPlanEntry[]) =>
     invoke<void>("set_budget_plan", { auctionId, plan }),
+
+  backupDatabase: (path: string) => invoke<void>("backup_database", { path }),
+
+  /** Restituisce dove è finita la copia di sicurezza dello stato precedente. */
+  restoreDatabase: (path: string) => invoke<string>("restore_database", { path }),
+
+  suggestedBackupName: () => invoke<string>("suggested_backup_name"),
 };
 
 /** Le chiavi delle query, in un posto solo: invalidarne una a caso è il modo

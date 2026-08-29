@@ -10,9 +10,11 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::import;
+use crate::backup;
 use serde::Serialize;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::Manager as _;
+use tauri::{AppHandle, State};
 
 /// Cosa è entrato nel database dopo un import, per darne conto a chi guarda.
 #[derive(Debug, Serialize)]
@@ -201,6 +203,40 @@ pub fn set_budget_plan(
 ) -> Result<()> {
     let mut conn = lock(&db)?;
     queries::set_budget_plan(&mut conn, auction_id, &plan)
+}
+
+#[tauri::command]
+pub fn backup_database(db: State<'_, Db>, path: String) -> Result<()> {
+    let conn = lock(&db)?;
+    backup::save_to(&conn, &PathBuf::from(path))
+}
+
+/// Nome proposto per il file di backup: contiene la data, così più copie
+/// nella stessa cartella non si sovrascrivono a vicenda.
+#[tauri::command]
+pub fn suggested_backup_name() -> String {
+    format!(
+        "segna-asta-{}.db",
+        chrono::Local::now().format("%Y-%m-%d-%H%M")
+    )
+}
+
+/// Sostituisce i dati correnti con quelli del backup. Prima di farlo mette
+/// da parte una copia dello stato attuale: se il backup era quello sbagliato,
+/// non si è perso niente.
+#[tauri::command]
+pub fn restore_database(app: AppHandle, db: State<'_, Db>, path: String) -> Result<String> {
+    let safety_copy = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| AppError::invalid(format!("cartella dati non raggiungibile: {err}")))?
+        .join("prima-del-ripristino.db");
+
+    let mut conn = lock(&db)?;
+    backup::save_to(&conn, &safety_copy)?;
+    backup::restore_from(&mut conn, &PathBuf::from(path))?;
+
+    Ok(safety_copy.to_string_lossy().to_string())
 }
 
 /// Un mutex avvelenato significa che un altro comando è andato in panico:
