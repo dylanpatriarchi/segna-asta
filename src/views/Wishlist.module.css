@@ -1,0 +1,109 @@
+.page {
+  padding: var(--s4) var(--s5);
+  display: grid;
+  gap: var(--s4);
+  align-content: start;
+  max-width: 1040px;
+}
+
+.search {
+  min-width: 240px;
+}
+
+.group {
+  width: 150px;
+}
+
+.suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--hairline) solid var(--ink);
+  max-width: 520px;
+}
+
+.suggestion {
+  display: grid;
+  grid-template-columns: 1fr auto 56px;
+  gap: var(--s2);
+  align-items: baseline;
+  width: 100%;
+  padding: var(--s1) 0;
+  border: 0;
+  border-bottom: var(--hairline) solid var(--rule);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--t-body);
+}
+
+.suggestion:hover {
+  background: var(--paper-sunken);
+}
+
+/* Un obiettivo già preso resta in lista ma sbiadisce: serve a ricordare
+   cosa si era puntato, non a farci più conto */
+.taken td {
+  color: var(--ink-4);
+}
+
+.taken td:first-child {
+  text-decoration: line-through;
+}
+
+.cellInput {
+  width: 56px;
+  padding: 2px var(--s-half);
+  border: var(--hairline) solid transparent;
+  background: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-body);
+}
+
+.cellInput:hover {
+  border-color: var(--rule);
+}
+
+.cellInput:focus {
+  outline: none;
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
+.rowActions {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.iconButton {
+  width: 22px;
+  height: 22px;
+  border: var(--hairline) solid transparent;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-3);
+  line-height: 1;
+}
+
+.iconButton:hover {
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+.planRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 160px));
+  gap: var(--s2);
+}
+
+.planInput {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s1);
+}
+
+.pct {
+  width: 64px;
+}

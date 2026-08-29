@@ -2,9 +2,12 @@
 //! fa il suo lavoro e lo rilascia: nessuno stato resta appeso fra una
 //! chiamata e l'altra.
 
-use crate::db::queries::{self, NewAuction, PlayerFilter};
+use crate::db::queries::{self, NewAuction, PlayerFilter, WishInput};
 use crate::db::Db;
-use crate::domain::{Auction, AuctionState, Manager, Pick, PickDetail, Player, PlayerList};
+use crate::domain::{
+    Auction, AuctionState, BudgetPlanEntry, Manager, Pick, PickDetail, Player, PlayerList,
+    WishEntry,
+};
 use crate::error::{AppError, Result};
 use crate::import;
 use serde::Serialize;
@@ -158,6 +161,46 @@ pub fn active_auction_id(db: State<'_, Db>) -> Result<Option<i64>> {
 pub fn set_active_auction(db: State<'_, Db>, auction_id: i64) -> Result<()> {
     let conn = lock(&db)?;
     queries::set_active_auction(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn save_wish(db: State<'_, Db>, input: WishInput) -> Result<()> {
+    let conn = lock(&db)?;
+    queries::save_wish(&conn, &input)
+}
+
+#[tauri::command]
+pub fn remove_wish(db: State<'_, Db>, auction_id: i64, player_id: i64) -> Result<()> {
+    let conn = lock(&db)?;
+    queries::remove_wish(&conn, auction_id, player_id)
+}
+
+#[tauri::command]
+pub fn move_wish(db: State<'_, Db>, auction_id: i64, player_id: i64, up: bool) -> Result<()> {
+    let mut conn = lock(&db)?;
+    queries::move_wish(&mut conn, auction_id, player_id, up)
+}
+
+#[tauri::command]
+pub fn wishlist(db: State<'_, Db>, auction_id: i64) -> Result<Vec<WishEntry>> {
+    let conn = lock(&db)?;
+    queries::wishlist(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn budget_plan(db: State<'_, Db>, auction_id: i64) -> Result<Vec<BudgetPlanEntry>> {
+    let conn = lock(&db)?;
+    queries::budget_plan(&conn, auction_id)
+}
+
+#[tauri::command]
+pub fn set_budget_plan(
+    db: State<'_, Db>,
+    auction_id: i64,
+    plan: Vec<BudgetPlanEntry>,
+) -> Result<()> {
+    let mut conn = lock(&db)?;
+    queries::set_budget_plan(&mut conn, auction_id, &plan)
 }
 
 /// Un mutex avvelenato significa che un altro comando è andato in panico:
