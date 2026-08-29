@@ -1,23 +1,13 @@
 import styles from "./Placeholder.module.css";
 
 /**
- * Segnaposto per una sezione non ancora costruita: dichiara cosa ci finirà,
+ * Segnaposto per una sezione non ancora costruita: elenca cosa ci finirà,
  * così la shell resta navigabile mentre le milestone avanzano.
  */
-export function Placeholder({
-  title,
-  body,
-  items,
-}: {
-  title: string;
-  body: string;
-  items: string[];
-}) {
+export function Placeholder({ items }: { items: string[] }) {
   return (
     <section className={styles.placeholder}>
-      <div className={styles.rule} />
-      <h2 className={styles.title}>{title}</h2>
-      <p className={styles.body}>{body}</p>
+      <span className="eyebrow">In arrivo</span>
       <ul className={styles.list}>
         {items.map((item) => (
           <li key={item}>

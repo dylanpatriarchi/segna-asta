@@ -7,7 +7,7 @@
 }
 
 .brand {
-  padding: var(--s3) var(--s3) var(--s4);
+  padding: var(--s3);
   border-bottom: var(--hairline) solid var(--rule);
 }
 
@@ -15,12 +15,6 @@
   font-size: var(--t-lead);
   font-weight: 700;
   letter-spacing: var(--tracking-tight);
-}
-
-.tagline {
-  margin-top: var(--s-half);
-  font-size: var(--t-small);
-  color: var(--ink-3);
 }
 
 .nav {
@@ -70,20 +64,3 @@
   font-weight: 500;
 }
 
-.footer {
-  margin-top: auto;
-  padding: var(--s3);
-  border-top: var(--hairline) solid var(--rule);
-  display: grid;
-  gap: var(--s-half);
-}
-
-.footerValue {
-  font-size: var(--t-body);
-  font-weight: 600;
-}
-
-.footerHint {
-  font-size: var(--t-small);
-  color: var(--ink-3);
-}

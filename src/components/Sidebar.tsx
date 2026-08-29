@@ -10,7 +10,6 @@ export function Sidebar() {
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
         <div className={styles.wordmark}>Segna-Asta</div>
-        <div className={styles.tagline}>Fantacalcio · asta</div>
       </div>
 
       <nav className={styles.nav} aria-label="Sezioni">
@@ -27,12 +26,6 @@ export function Sidebar() {
           </button>
         ))}
       </nav>
-
-      <div className={styles.footer}>
-        <span className="eyebrow">Asta attiva</span>
-        <span className={styles.footerValue}>Nessuna</span>
-        <span className={styles.footerHint}>Creane una da Impostazioni</span>
-      </div>
     </aside>
   );
 }

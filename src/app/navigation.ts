@@ -1,40 +1,12 @@
 /** Le sezioni dell'app, nell'ordine in cui compaiono in barra laterale. */
 export const SECTIONS = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    caption: "Lo stato dell'asta a colpo d'occhio",
-  },
-  {
-    id: "listone",
-    label: "Listone",
-    caption: "Tutti gli svincolati, con stato e quotazione",
-  },
-  {
-    id: "wishlist",
-    label: "Lista desideri",
-    caption: "Obiettivi per fascia, prezzo target e tetto d'offerta",
-  },
-  {
-    id: "asta",
-    label: "Sala asta",
-    caption: "Segna le assegnazioni mentre l'asta corre",
-  },
-  {
-    id: "rose",
-    label: "Rose",
-    caption: "La rosa di ogni partecipante, reparto per reparto",
-  },
-  {
-    id: "analisi",
-    label: "Analisi",
-    caption: "Spesa, scostamenti, inflazione e crediti avversari",
-  },
-  {
-    id: "impostazioni",
-    label: "Impostazioni",
-    caption: "Regole lega, partecipanti, listone e backup",
-  },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "listone", label: "Listone" },
+  { id: "wishlist", label: "Lista desideri" },
+  { id: "asta", label: "Sala asta" },
+  { id: "rose", label: "Rose" },
+  { id: "analisi", label: "Analisi" },
+  { id: "impostazioni", label: "Impostazioni" },
 ] as const;
 
 export type SectionId = (typeof SECTIONS)[number]["id"];
