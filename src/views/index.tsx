@@ -1,22 +1,14 @@
-import { Placeholder } from "@/components/Placeholder";
 import { Dashboard } from "./Dashboard";
 import { Listone } from "./Listone";
 import { SalaAsta } from "./SalaAsta";
 import { Rose } from "./Rose";
 import { Wishlist } from "./Wishlist";
+import { Analisi } from "./Analisi";
 import { Impostazioni } from "./Impostazioni";
 import type { SectionId } from "@/app/navigation";
 
-/** Cosa conterranno le sezioni non ancora costruite. */
-const IN_ARRIVO: Partial<Record<SectionId, string[]>> = {
-  analisi: [
-    "Budget e spesa per ruolo, contro il piano",
-    "Scostamento tra prezzo pagato e quotazione",
-    "Inflazione del mercato durante l'asta",
-    "Crediti residui e slot mancanti degli avversari",
-  ],
-};
-
+/** Ogni sezione ha ormai la sua vista: lo switch è esaustivo, e il tipo
+ *  lo garantisce se un domani se ne aggiunge una. */
 export function SectionView({ section }: { section: SectionId }) {
   switch (section) {
     case "dashboard":
@@ -29,9 +21,9 @@ export function SectionView({ section }: { section: SectionId }) {
       return <Rose />;
     case "wishlist":
       return <Wishlist />;
+    case "analisi":
+      return <Analisi />;
     case "impostazioni":
       return <Impostazioni />;
-    default:
-      return <Placeholder items={IN_ARRIVO[section] ?? []} />;
   }
 }

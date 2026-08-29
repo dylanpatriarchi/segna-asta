@@ -1,0 +1,12 @@
+.page {
+  padding: var(--s4) var(--s5);
+  display: grid;
+  gap: var(--s5);
+  align-content: start;
+  max-width: 1040px;
+}
+
+.pageHead {
+  display: flex;
+  justify-content: flex-end;
+}
