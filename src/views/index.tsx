@@ -3,17 +3,12 @@ import { Dashboard } from "./Dashboard";
 import { Listone } from "./Listone";
 import { SalaAsta } from "./SalaAsta";
 import { Rose } from "./Rose";
+import { Wishlist } from "./Wishlist";
 import { Impostazioni } from "./Impostazioni";
 import type { SectionId } from "@/app/navigation";
 
 /** Cosa conterranno le sezioni non ancora costruite. */
 const IN_ARRIVO: Partial<Record<SectionId, string[]>> = {
-  wishlist: [
-    "Fasce: Top, Buono, Ripiego, Scommessa",
-    "Prezzo target e tetto massimo d'offerta",
-    "Gruppi di alternative intercambiabili",
-    "Somma dei target confrontata col budget e col piano di reparto",
-  ],
   analisi: [
     "Budget e spesa per ruolo, contro il piano",
     "Scostamento tra prezzo pagato e quotazione",
@@ -32,6 +27,8 @@ export function SectionView({ section }: { section: SectionId }) {
       return <SalaAsta />;
     case "rose":
       return <Rose />;
+    case "wishlist":
+      return <Wishlist />;
     case "impostazioni":
       return <Impostazioni />;
     default:

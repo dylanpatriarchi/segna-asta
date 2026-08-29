@@ -3,8 +3,8 @@
 
 use crate::domain::budget;
 use crate::domain::{
-    Auction, AuctionState, AuctionStatus, Manager, ManagerState, Pick, PickDetail, Player,
-    PlayerList, Role, RosterSlots,
+    Auction, AuctionState, AuctionStatus, BudgetPlanEntry, Manager, ManagerState, Pick, PickDetail,
+    Player, PlayerList, Role, RosterSlots, Tier, WishEntry,
 };
 use crate::error::{AppError, Result};
 use crate::import::ImportedPlayer;
@@ -450,6 +450,189 @@ fn expected_quotation(conn: &Connection, list_id: i64, roster_places: i64) -> Re
     Ok(total)
 }
 
+// -------------------------------------------------------- lista desideri
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WishInput {
+    pub auction_id: i64,
+    pub player_id: i64,
+    pub tier: Tier,
+    pub target_price: Option<i64>,
+    pub max_bid: Option<i64>,
+    pub group_label: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// Aggiunge o aggiorna un obiettivo. Un giocatore già in lista non viene
+/// duplicato: si sovrascrivono i suoi valori.
+pub fn save_wish(conn: &Connection, input: &WishInput) -> Result<()> {
+    if let Some(max) = input.max_bid {
+        if max < 0 {
+            return Err(AppError::invalid("il tetto d'offerta non può essere negativo"));
+        }
+    }
+
+    // Chi arriva per ultimo si mette in coda alla sua fascia.
+    let priority: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(priority), 0) + 1 FROM wishlist WHERE auction_id = ?1",
+        [input.auction_id],
+        |row| row.get(0),
+    )?;
+
+    conn.execute(
+        "INSERT INTO wishlist
+             (auction_id, player_id, tier, target_price, max_bid, priority, group_label, notes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(auction_id, player_id) DO UPDATE SET
+             tier = excluded.tier,
+             target_price = excluded.target_price,
+             max_bid = excluded.max_bid,
+             group_label = excluded.group_label,
+             notes = excluded.notes",
+        params![
+            input.auction_id,
+            input.player_id,
+            input.tier.as_i64(),
+            input.target_price,
+            input.max_bid,
+            priority,
+            input.group_label.as_deref().filter(|s| !s.trim().is_empty()),
+            input.notes.as_deref().filter(|s| !s.trim().is_empty()),
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn remove_wish(conn: &Connection, auction_id: i64, player_id: i64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM wishlist WHERE auction_id = ?1 AND player_id = ?2",
+        params![auction_id, player_id],
+    )?;
+    Ok(())
+}
+
+/// Sposta un obiettivo su o giù nella lista, scambiando la priorità con il
+/// vicino: l'ordine resta compatto senza rinumerare tutto.
+pub fn move_wish(conn: &mut Connection, auction_id: i64, player_id: i64, up: bool) -> Result<()> {
+    let entries = wishlist(conn, auction_id)?;
+    let index = entries
+        .iter()
+        .position(|e| e.player_id == player_id)
+        .ok_or_else(|| AppError::not_found("obiettivo non in lista"))?;
+
+    let Some(other_index) = (if up { index.checked_sub(1) } else { Some(index + 1) }) else {
+        return Ok(()); // già in cima
+    };
+    let Some(other) = entries.get(other_index) else {
+        return Ok(()); // già in fondo
+    };
+    let current = &entries[index];
+
+    let tx = conn.transaction()?;
+    tx.execute(
+        "UPDATE wishlist SET priority = ?1 WHERE auction_id = ?2 AND player_id = ?3",
+        params![other.priority, auction_id, current.player_id],
+    )?;
+    tx.execute(
+        "UPDATE wishlist SET priority = ?1 WHERE auction_id = ?2 AND player_id = ?3",
+        params![current.priority, auction_id, other.player_id],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Gli obiettivi in ordine di fascia e priorità, ognuno con lo stato: chi
+/// se l'è preso e a quanto, se qualcuno l'ha fatto.
+pub fn wishlist(conn: &Connection, auction_id: i64) -> Result<Vec<WishEntry>> {
+    let mut stmt = conn.prepare(
+        "SELECT w.id, w.player_id, p.name, p.serie_a_team, p.role, p.quotation,
+                w.tier, w.target_price, w.max_bid, w.priority, w.group_label, w.notes,
+                m.name, k.price, m.is_me
+             FROM wishlist w
+             JOIN players p ON p.id = w.player_id
+             LEFT JOIN picks k ON k.player_id = w.player_id AND k.auction_id = w.auction_id
+             LEFT JOIN managers m ON m.id = k.manager_id
+             WHERE w.auction_id = ?1
+             ORDER BY w.tier, w.priority",
+    )?;
+    let rows = stmt.query_map([auction_id], |row| {
+        let role: String = row.get(4)?;
+        let tier: i64 = row.get(6)?;
+        Ok(WishEntry {
+            id: row.get(0)?,
+            player_id: row.get(1)?,
+            player_name: row.get(2)?,
+            serie_a_team: row.get(3)?,
+            role: Role::parse(&role).unwrap_or(Role::A),
+            quotation: row.get(5)?,
+            tier: Tier::parse(tier).unwrap_or(Tier::Scommessa),
+            target_price: row.get(7)?,
+            max_bid: row.get(8)?,
+            priority: row.get(9)?,
+            group_label: row.get(10)?,
+            notes: row.get(11)?,
+            taken_by: row.get(12)?,
+            taken_price: row.get(13)?,
+            taken_by_me: row.get::<_, Option<i64>>(14)?.unwrap_or(0) != 0,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
+}
+
+// --------------------------------------------------------- piano di spesa
+
+/// Quanto budget intendo destinare a ogni reparto. Senza un piano salvato
+/// si parte da una ripartizione classica: pochi crediti sui portieri, il
+/// grosso su centrocampo e attacco.
+pub fn budget_plan(conn: &Connection, auction_id: i64) -> Result<Vec<BudgetPlanEntry>> {
+    let mut stmt = conn
+        .prepare("SELECT role, target_pct FROM budget_plan WHERE auction_id = ?1")?;
+    let rows = stmt.query_map([auction_id], |row| {
+        let role: String = row.get(0)?;
+        Ok(BudgetPlanEntry {
+            role: Role::parse(&role).unwrap_or(Role::A),
+            target_pct: row.get(1)?,
+        })
+    })?;
+    let saved: Vec<BudgetPlanEntry> = rows.collect::<rusqlite::Result<_>>()?;
+
+    if saved.len() == Role::ALL.len() {
+        return Ok(saved);
+    }
+    Ok(DEFAULT_PLAN
+        .iter()
+        .map(|&(role, target_pct)| BudgetPlanEntry { role, target_pct })
+        .collect())
+}
+
+const DEFAULT_PLAN: [(Role, f64); 4] = [
+    (Role::P, 6.0),
+    (Role::D, 14.0),
+    (Role::C, 30.0),
+    (Role::A, 50.0),
+];
+
+pub fn set_budget_plan(
+    conn: &mut Connection,
+    auction_id: i64,
+    plan: &[BudgetPlanEntry],
+) -> Result<()> {
+    let tx = conn.transaction()?;
+    for entry in plan {
+        if entry.target_pct < 0.0 {
+            return Err(AppError::invalid("una quota di budget non può essere negativa"));
+        }
+        tx.execute(
+            "INSERT INTO budget_plan (auction_id, role, target_pct) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(auction_id, role) DO UPDATE SET target_pct = excluded.target_pct",
+            params![auction_id, entry.role.as_str(), entry.target_pct],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 // ------------------------------------------------------------ preferenze
 
 /// L'asta su cui si sta lavorando, ricordata fra un avvio e l'altro.
@@ -822,6 +1005,135 @@ mod tests {
             (1.0..3.0).contains(&reference),
             "un riferimento fuori da questa forbice segnala un conto sbagliato: {reference}"
         );
+    }
+
+
+    #[test]
+    fn un_obiettivo_salvato_due_volte_si_aggiorna_invece_di_sdoppiarsi() {
+        let (db, auction_id, _, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+        let player = &all[0];
+
+        let mut input = WishInput {
+            auction_id,
+            player_id: player.id,
+            tier: Tier::Top,
+            target_price: Some(40),
+            max_bid: Some(55),
+            group_label: None,
+            notes: None,
+        };
+        save_wish(&conn, &input).expect("primo salvataggio");
+        input.max_bid = Some(70);
+        input.tier = Tier::Buono;
+        save_wish(&conn, &input).expect("secondo salvataggio");
+
+        let list = wishlist(&conn, auction_id).expect("lettura riuscita");
+        assert_eq!(list.len(), 1, "lo stesso giocatore non compare due volte");
+        assert_eq!(list[0].max_bid, Some(70));
+        assert_eq!(list[0].tier, Tier::Buono);
+    }
+
+    #[test]
+    fn la_lista_dice_chi_ha_soffiato_l_obiettivo() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+        let player = &all[0];
+
+        save_wish(
+            &conn,
+            &WishInput {
+                auction_id,
+                player_id: player.id,
+                tier: Tier::Top,
+                target_price: Some(30),
+                max_bid: Some(40),
+                group_label: None,
+                notes: None,
+            },
+        )
+        .expect("obiettivo salvato");
+        // Se lo prende un avversario, l'obiettivo resta in lista ma segnato.
+        assign_player(&conn, auction_id, player.id, people[1].id, 45).expect("assegnato al rivale");
+
+        let entry = &wishlist(&conn, auction_id).expect("lettura riuscita")[0];
+        assert_eq!(entry.taken_by.as_deref(), Some("Marco"));
+        assert_eq!(entry.taken_price, Some(45));
+        assert!(!entry.taken_by_me);
+    }
+
+    #[test]
+    fn gli_obiettivi_si_riordinano_uno_alla_volta() {
+        let (db, auction_id, _, all) = asta_pronta();
+        let mut conn = db.0.lock().expect("mutex non avvelenato");
+        for player in all.iter().take(3) {
+            save_wish(
+                &conn,
+                &WishInput {
+                    auction_id,
+                    player_id: player.id,
+                    tier: Tier::Top,
+                    target_price: None,
+                    max_bid: None,
+                    group_label: None,
+                    notes: None,
+                },
+            )
+            .expect("obiettivo salvato");
+        }
+
+        let before: Vec<i64> =
+            wishlist(&conn, auction_id).unwrap().iter().map(|e| e.player_id).collect();
+        move_wish(&mut conn, auction_id, before[2], true).expect("spostato su");
+        let after: Vec<i64> =
+            wishlist(&conn, auction_id).unwrap().iter().map(|e| e.player_id).collect();
+
+        assert_eq!(after, vec![before[0], before[2], before[1]]);
+    }
+
+    #[test]
+    fn spostare_oltre_i_bordi_non_fa_danni() {
+        let (db, auction_id, _, all) = asta_pronta();
+        let mut conn = db.0.lock().expect("mutex non avvelenato");
+        save_wish(
+            &conn,
+            &WishInput {
+                auction_id,
+                player_id: all[0].id,
+                tier: Tier::Top,
+                target_price: None,
+                max_bid: None,
+                group_label: None,
+                notes: None,
+            },
+        )
+        .expect("obiettivo salvato");
+
+        move_wish(&mut conn, auction_id, all[0].id, true).expect("in cima resta in cima");
+        move_wish(&mut conn, auction_id, all[0].id, false).expect("in fondo resta in fondo");
+        assert_eq!(wishlist(&conn, auction_id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn senza_un_piano_salvato_se_ne_propone_uno_sensato() {
+        let (db, auction_id, _, _) = asta_pronta();
+        let mut conn = db.0.lock().expect("mutex non avvelenato");
+
+        let proposed = budget_plan(&conn, auction_id).expect("piano di partenza");
+        assert_eq!(proposed.len(), 4);
+        let total: f64 = proposed.iter().map(|e| e.target_pct).sum();
+        assert!((total - 100.0).abs() < f64::EPSILON, "le quote di partenza fanno 100");
+
+        let mine = vec![
+            BudgetPlanEntry { role: Role::P, target_pct: 10.0 },
+            BudgetPlanEntry { role: Role::D, target_pct: 20.0 },
+            BudgetPlanEntry { role: Role::C, target_pct: 30.0 },
+            BudgetPlanEntry { role: Role::A, target_pct: 40.0 },
+        ];
+        set_budget_plan(&mut conn, auction_id, &mine).expect("piano salvato");
+        let saved = budget_plan(&conn, auction_id).expect("piano riletto");
+        let goalkeepers = saved.iter().find(|e| e.role == Role::P).expect("i portieri ci sono");
+        assert!((goalkeepers.target_pct - 10.0).abs() < f64::EPSILON);
     }
 
     #[test]

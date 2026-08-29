@@ -108,6 +108,47 @@ export type AuctionState = {
   leagueInflation: number | null;
 };
 
+export type Tier = "top" | "buono" | "ripiego" | "scommessa";
+
+export const TIERS: Tier[] = ["top", "buono", "ripiego", "scommessa"];
+
+export const TIER_LABEL: Record<Tier, string> = {
+  top: "Top",
+  buono: "Buono",
+  ripiego: "Ripiego",
+  scommessa: "Scommessa",
+};
+
+export type WishEntry = {
+  id: number;
+  playerId: number;
+  playerName: string;
+  serieATeam: string;
+  role: Role;
+  quotation: number;
+  tier: Tier;
+  targetPrice: number | null;
+  maxBid: number | null;
+  priority: number;
+  groupLabel: string | null;
+  notes: string | null;
+  takenBy: string | null;
+  takenPrice: number | null;
+  takenByMe: boolean;
+};
+
+export type WishInput = {
+  auctionId: number;
+  playerId: number;
+  tier: Tier;
+  targetPrice: number | null;
+  maxBid: number | null;
+  groupLabel: string | null;
+  notes: string | null;
+};
+
+export type BudgetPlanEntry = { role: Role; targetPct: number };
+
 export type PlayerFilter = {
   search?: string;
   role?: Role;
@@ -159,6 +200,21 @@ export const api = {
 
   setActiveAuction: (auctionId: number) =>
     invoke<void>("set_active_auction", { auctionId }),
+
+  saveWish: (input: WishInput) => invoke<void>("save_wish", { input }),
+
+  removeWish: (auctionId: number, playerId: number) =>
+    invoke<void>("remove_wish", { auctionId, playerId }),
+
+  moveWish: (auctionId: number, playerId: number, up: boolean) =>
+    invoke<void>("move_wish", { auctionId, playerId, up }),
+
+  wishlist: (auctionId: number) => invoke<WishEntry[]>("wishlist", { auctionId }),
+
+  budgetPlan: (auctionId: number) => invoke<BudgetPlanEntry[]>("budget_plan", { auctionId }),
+
+  setBudgetPlan: (auctionId: number, plan: BudgetPlanEntry[]) =>
+    invoke<void>("set_budget_plan", { auctionId, plan }),
 };
 
 /** Le chiavi delle query, in un posto solo: invalidarne una a caso è il modo
@@ -171,4 +227,6 @@ export const keys = {
   picks: (id: number) => ["picks", id] as const,
   players: (listId: number, filter?: PlayerFilter) => ["players", listId, filter] as const,
   teams: (listId: number) => ["teams", listId] as const,
+  wishlist: (id: number) => ["wishlist", id] as const,
+  budgetPlan: (id: number) => ["budgetPlan", id] as const,
 };
