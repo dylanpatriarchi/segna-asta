@@ -1,3 +1,4 @@
+mod backup;
 mod commands;
 mod db;
 mod domain;
@@ -41,6 +42,9 @@ pub fn run() {
             commands::wishlist,
             commands::budget_plan,
             commands::set_budget_plan,
+            commands::backup_database,
+            commands::restore_database,
+            commands::suggested_backup_name,
         ])
         .run(tauri::generate_context!())
         .expect("errore durante l'avvio dell'applicazione");
