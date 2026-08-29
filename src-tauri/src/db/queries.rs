@@ -4,7 +4,7 @@
 use crate::domain::budget;
 use crate::domain::{
     Auction, AuctionState, AuctionStatus, BudgetPlanEntry, Manager, ManagerState, Pick, PickDetail,
-    Player, PlayerList, Role, RosterSlots, Tier, WishEntry,
+    Player, PlayerList, Role, RosterSlots, WishEntry,
 };
 use crate::error::{AppError, Result};
 use crate::import::ImportedPlayer;
@@ -457,7 +457,6 @@ fn expected_quotation(conn: &Connection, list_id: i64, roster_places: i64) -> Re
 pub struct WishInput {
     pub auction_id: i64,
     pub player_id: i64,
-    pub tier: Tier,
     pub target_price: Option<i64>,
     pub max_bid: Option<i64>,
     pub group_label: Option<String>,
@@ -473,7 +472,7 @@ pub fn save_wish(conn: &Connection, input: &WishInput) -> Result<()> {
         }
     }
 
-    // Chi arriva per ultimo si mette in coda alla sua fascia.
+    // Chi arriva per ultimo si mette in coda.
     let priority: i64 = conn.query_row(
         "SELECT COALESCE(MAX(priority), 0) + 1 FROM wishlist WHERE auction_id = ?1",
         [input.auction_id],
@@ -482,10 +481,9 @@ pub fn save_wish(conn: &Connection, input: &WishInput) -> Result<()> {
 
     conn.execute(
         "INSERT INTO wishlist
-             (auction_id, player_id, tier, target_price, max_bid, priority, group_label, notes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             (auction_id, player_id, target_price, max_bid, priority, group_label, notes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(auction_id, player_id) DO UPDATE SET
-             tier = excluded.tier,
              target_price = excluded.target_price,
              max_bid = excluded.max_bid,
              group_label = excluded.group_label,
@@ -493,7 +491,6 @@ pub fn save_wish(conn: &Connection, input: &WishInput) -> Result<()> {
         params![
             input.auction_id,
             input.player_id,
-            input.tier.as_i64(),
             input.target_price,
             input.max_bid,
             priority,
@@ -515,19 +512,26 @@ pub fn remove_wish(conn: &Connection, auction_id: i64, player_id: i64) -> Result
 /// Sposta un obiettivo su o giù nella lista, scambiando la priorità con il
 /// vicino: l'ordine resta compatto senza rinumerare tutto.
 pub fn move_wish(conn: &mut Connection, auction_id: i64, player_id: i64, up: bool) -> Result<()> {
-    let entries = wishlist(conn, auction_id)?;
-    let index = entries
+    let all = wishlist(conn, auction_id)?;
+    let current = all
         .iter()
-        .position(|e| e.player_id == player_id)
+        .find(|e| e.player_id == player_id)
         .ok_or_else(|| AppError::not_found("obiettivo non in lista"))?;
 
+    // Lo scambio avviene dentro il reparto: spostare un attaccante non deve
+    // farlo scavalcare un difensore, che sta in un'altra sezione della vista.
+    let siblings: Vec<&WishEntry> = all.iter().filter(|e| e.role == current.role).collect();
+    let index = siblings
+        .iter()
+        .position(|e| e.player_id == player_id)
+        .expect("l'obiettivo è nel proprio reparto");
+
     let Some(other_index) = (if up { index.checked_sub(1) } else { Some(index + 1) }) else {
-        return Ok(()); // già in cima
+        return Ok(()); // già in cima al reparto
     };
-    let Some(other) = entries.get(other_index) else {
-        return Ok(()); // già in fondo
+    let Some(other) = siblings.get(other_index) else {
+        return Ok(()); // già in fondo al reparto
     };
-    let current = &entries[index];
 
     let tx = conn.transaction()?;
     tx.execute(
@@ -542,23 +546,25 @@ pub fn move_wish(conn: &mut Connection, auction_id: i64, player_id: i64, up: boo
     Ok(())
 }
 
-/// Gli obiettivi in ordine di fascia e priorità, ognuno con lo stato: chi
-/// se l'è preso e a quanto, se qualcuno l'ha fatto.
+/// Gli obiettivi raggruppati per reparto e, dentro ciascuno, nell'ordine di
+/// priorità. Ognuno porta il suo stato: chi se l'è preso e a quanto.
 pub fn wishlist(conn: &Connection, auction_id: i64) -> Result<Vec<WishEntry>> {
     let mut stmt = conn.prepare(
         "SELECT w.id, w.player_id, p.name, p.serie_a_team, p.role, p.quotation,
-                w.tier, w.target_price, w.max_bid, w.priority, w.group_label, w.notes,
+                w.target_price, w.max_bid, w.priority, w.group_label, w.notes,
                 m.name, k.price, m.is_me
              FROM wishlist w
              JOIN players p ON p.id = w.player_id
              LEFT JOIN picks k ON k.player_id = w.player_id AND k.auction_id = w.auction_id
              LEFT JOIN managers m ON m.id = k.manager_id
              WHERE w.auction_id = ?1
-             ORDER BY w.tier, w.priority",
+             ORDER BY CASE p.role
+                          WHEN 'P' THEN 1 WHEN 'D' THEN 2 WHEN 'C' THEN 3 ELSE 4
+                      END,
+                      w.priority",
     )?;
     let rows = stmt.query_map([auction_id], |row| {
         let role: String = row.get(4)?;
-        let tier: i64 = row.get(6)?;
         Ok(WishEntry {
             id: row.get(0)?,
             player_id: row.get(1)?,
@@ -566,15 +572,14 @@ pub fn wishlist(conn: &Connection, auction_id: i64) -> Result<Vec<WishEntry>> {
             serie_a_team: row.get(3)?,
             role: Role::parse(&role).unwrap_or(Role::A),
             quotation: row.get(5)?,
-            tier: Tier::parse(tier).unwrap_or(Tier::Scommessa),
-            target_price: row.get(7)?,
-            max_bid: row.get(8)?,
-            priority: row.get(9)?,
-            group_label: row.get(10)?,
-            notes: row.get(11)?,
-            taken_by: row.get(12)?,
-            taken_price: row.get(13)?,
-            taken_by_me: row.get::<_, Option<i64>>(14)?.unwrap_or(0) != 0,
+            target_price: row.get(6)?,
+            max_bid: row.get(7)?,
+            priority: row.get(8)?,
+            group_label: row.get(9)?,
+            notes: row.get(10)?,
+            taken_by: row.get(11)?,
+            taken_price: row.get(12)?,
+            taken_by_me: row.get::<_, Option<i64>>(13)?.unwrap_or(0) != 0,
         })
     })?;
     rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
@@ -1017,7 +1022,6 @@ mod tests {
         let mut input = WishInput {
             auction_id,
             player_id: player.id,
-            tier: Tier::Top,
             target_price: Some(40),
             max_bid: Some(55),
             group_label: None,
@@ -1025,13 +1029,11 @@ mod tests {
         };
         save_wish(&conn, &input).expect("primo salvataggio");
         input.max_bid = Some(70);
-        input.tier = Tier::Buono;
         save_wish(&conn, &input).expect("secondo salvataggio");
 
         let list = wishlist(&conn, auction_id).expect("lettura riuscita");
         assert_eq!(list.len(), 1, "lo stesso giocatore non compare due volte");
         assert_eq!(list[0].max_bid, Some(70));
-        assert_eq!(list[0].tier, Tier::Buono);
     }
 
     #[test]
@@ -1045,7 +1047,6 @@ mod tests {
             &WishInput {
                 auction_id,
                 player_id: player.id,
-                tier: Tier::Top,
                 target_price: Some(30),
                 max_bid: Some(40),
                 group_label: None,
@@ -1072,7 +1073,6 @@ mod tests {
                 &WishInput {
                     auction_id,
                     player_id: player.id,
-                    tier: Tier::Top,
                     target_price: None,
                     max_bid: None,
                     group_label: None,
@@ -1091,6 +1091,76 @@ mod tests {
         assert_eq!(after, vec![before[0], before[2], before[1]]);
     }
 
+
+    #[test]
+    fn il_riordino_resta_dentro_al_reparto() {
+        let (db, auction_id, _, all) = asta_pronta();
+        let mut conn = db.0.lock().expect("mutex non avvelenato");
+
+        let attaccanti: Vec<&Player> =
+            all.iter().filter(|p| p.role == Role::A).take(2).collect();
+        let difensore = all.iter().find(|p| p.role == Role::D).expect("un difensore c'e");
+
+        for player in attaccanti.iter().map(|p| *p).chain(std::iter::once(difensore)) {
+            save_wish(
+                &conn,
+                &WishInput {
+                    auction_id,
+                    player_id: player.id,
+                    target_price: None,
+                    max_bid: None,
+                    group_label: None,
+                    notes: None,
+                },
+            )
+            .expect("obiettivo salvato");
+        }
+
+        // Il secondo attaccante sale: deve scambiarsi col primo attaccante,
+        // non col difensore che nella lista completa gli sta accanto.
+        move_wish(&mut conn, auction_id, attaccanti[1].id, true).expect("spostato su");
+
+        let list = wishlist(&conn, auction_id).expect("lettura riuscita");
+        let ordine_attacco: Vec<i64> = list
+            .iter()
+            .filter(|e| e.role == Role::A)
+            .map(|e| e.player_id)
+            .collect();
+        assert_eq!(ordine_attacco, vec![attaccanti[1].id, attaccanti[0].id]);
+        assert_eq!(
+            list.iter().filter(|e| e.role == Role::D).count(),
+            1,
+            "il difensore resta dov'era, nel suo reparto"
+        );
+    }
+
+    #[test]
+    fn gli_obiettivi_arrivano_raggruppati_per_reparto() {
+        let (db, auction_id, _, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+
+        // Inseriti alla rinfusa, devono tornare in ordine P, D, C, A.
+        for role in [Role::A, Role::P, Role::C, Role::D] {
+            let player = all.iter().find(|p| p.role == role).expect("il reparto ha giocatori");
+            save_wish(
+                &conn,
+                &WishInput {
+                    auction_id,
+                    player_id: player.id,
+                    target_price: None,
+                    max_bid: None,
+                    group_label: None,
+                    notes: None,
+                },
+            )
+            .expect("obiettivo salvato");
+        }
+
+        let roles: Vec<Role> =
+            wishlist(&conn, auction_id).expect("lettura riuscita").iter().map(|e| e.role).collect();
+        assert_eq!(roles, vec![Role::P, Role::D, Role::C, Role::A]);
+    }
+
     #[test]
     fn spostare_oltre_i_bordi_non_fa_danni() {
         let (db, auction_id, _, all) = asta_pronta();
@@ -1100,7 +1170,6 @@ mod tests {
             &WishInput {
                 auction_id,
                 player_id: all[0].id,
-                tier: Tier::Top,
                 target_price: None,
                 max_bid: None,
                 group_label: None,
