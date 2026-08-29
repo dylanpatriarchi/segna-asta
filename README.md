@@ -26,11 +26,11 @@ tipizzati; il frontend non scrive SQL.
 ## Sviluppo
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
-Requisiti: Node 20+, Rust stable, toolchain Tauri per la propria piattaforma.
+Requisiti: Node 20+, pnpm 10+, Rust stable, toolchain Tauri per la propria piattaforma.
 
 ## Dati
 
