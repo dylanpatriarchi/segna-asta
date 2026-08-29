@@ -129,3 +129,67 @@ pub struct Manager {
     pub is_me: bool,
     pub order_index: i64,
 }
+
+/// Un giocatore assegnato a un partecipante, al prezzo battuto.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pick {
+    pub id: i64,
+    pub auction_id: i64,
+    pub player_id: i64,
+    pub manager_id: i64,
+    pub price: i64,
+    /// Ordine di assegnazione: serve ad annullare l'ultima e a leggere
+    /// l'andamento del mercato nel tempo.
+    pub seq: i64,
+    pub picked_at: String,
+}
+
+/// Un'assegnazione con tutto quello che serve per mostrarla senza altre query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickDetail {
+    pub id: i64,
+    pub player_id: i64,
+    pub player_name: String,
+    pub serie_a_team: String,
+    pub role: Role,
+    pub quotation: i64,
+    pub manager_id: i64,
+    pub manager_name: String,
+    pub is_mine: bool,
+    pub price: i64,
+    pub seq: i64,
+}
+
+/// Come sta messo un partecipante in questo momento. Tutto derivato dalle
+/// assegnazioni: non c'è niente di simile salvato nel database.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagerState {
+    pub manager: Manager,
+    pub spent: i64,
+    pub credits_left: i64,
+    /// Slot riempiti e ancora da riempire, reparto per reparto.
+    pub filled: RosterSlots,
+    pub missing: RosterSlots,
+    pub slots_left: i64,
+    /// Quanto può offrire lasciando un credito per ogni casella vuota.
+    pub max_bid: i64,
+    pub affordable_average: Option<f64>,
+}
+
+/// La fotografia dell'asta: alimenta dashboard, rose e sala asta.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuctionState {
+    pub auction: Auction,
+    pub managers: Vec<ManagerState>,
+    pub picks_count: i64,
+    pub total_paid: i64,
+    /// Quotazioni di listino dei giocatori già assegnati: il metro con cui
+    /// si misura quanto sta correndo il mercato.
+    pub assigned_quotation: i64,
+    pub inflation: Option<f64>,
+    pub league_inflation: Option<f64>,
+}

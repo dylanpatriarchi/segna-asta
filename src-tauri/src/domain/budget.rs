@@ -39,13 +39,17 @@ pub fn inflation(total_paid: i64, total_quotation: i64) -> Option<f64> {
 }
 
 /// L'inflazione che la lega avrà per forza a fine asta: tutti i crediti in
-/// gioco divisi per le quotazioni dei giocatori che verranno assegnati.
-/// È la riga di riferimento contro cui leggere l'inflazione corrente.
-pub fn league_inflation(budget: i64, manager_count: i64, assigned_quotation: i64) -> Option<f64> {
+/// gioco divisi per le quotazioni dei giocatori che *verranno* assegnati —
+/// non di quelli già assegnati, altrimenti a inizio asta il rapporto sarebbe
+/// enorme e non direbbe nulla.
+///
+/// È la riga di riferimento contro cui leggere l'inflazione corrente: sopra,
+/// si sta pagando più di quanto la lega possa permettersi in media.
+pub fn league_inflation(budget: i64, manager_count: i64, expected_quotation: i64) -> Option<f64> {
     if manager_count <= 0 {
         return None;
     }
-    inflation(budget.saturating_mul(manager_count), assigned_quotation)
+    inflation(budget.saturating_mul(manager_count), expected_quotation)
 }
 
 /// Scostamento tra prezzo pagato e quotazione, in percentuale del listino.
@@ -108,10 +112,11 @@ mod tests {
     }
 
     #[test]
-    fn inflazione_di_lega_divide_tutti_i_crediti_per_le_quotazioni() {
-        // 8 partecipanti da 500 crediti su un listone da 3702: circa 1.08.
-        let value = league_inflation(500, 8, 3702).expect("lega non vuota");
-        assert!((value - 1.0805).abs() < 0.001);
+    fn inflazione_di_lega_divide_i_crediti_per_le_quotazioni_attese() {
+        // 8 partecipanti da 500 crediti (4000 in tutto) sui 200 giocatori che
+        // finiranno assegnati, che di listino ne valgono 2500: 1.6 volte.
+        let value = league_inflation(500, 8, 2500).expect("lega non vuota");
+        assert!((value - 1.6).abs() < f64::EPSILON);
     }
 
     #[test]

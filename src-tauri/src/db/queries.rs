@@ -1,7 +1,11 @@
 //! L'unico posto dove si scrive SQL. I comandi Tauri chiamano queste
 //! funzioni, il frontend non vede mai una query.
 
-use crate::domain::{Auction, AuctionStatus, Manager, Player, PlayerList, Role, RosterSlots};
+use crate::domain::budget;
+use crate::domain::{
+    Auction, AuctionState, AuctionStatus, Manager, ManagerState, Pick, PickDetail, Player,
+    PlayerList, Role, RosterSlots,
+};
 use crate::error::{AppError, Result};
 use crate::import::ImportedPlayer;
 use rusqlite::{params, Connection, Row};
@@ -274,6 +278,203 @@ pub fn managers(conn: &Connection, auction_id: i64) -> Result<Vec<Manager>> {
     rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
 }
 
+// ---------------------------------------------------------- assegnazioni
+
+/// Assegna un giocatore a un partecipante. Il prezzo è quello effettivamente
+/// battuto: non viene confrontato col budget, perché a un'asta capita di
+/// sforare e l'app deve poterlo registrare invece di impedirlo.
+pub fn assign_player(
+    conn: &Connection,
+    auction_id: i64,
+    player_id: i64,
+    manager_id: i64,
+    price: i64,
+) -> Result<Pick> {
+    if price < 0 {
+        return Err(AppError::invalid("il prezzo non può essere negativo"));
+    }
+
+    // La sequenza riprende da dove si era fermata, anche dopo un annullamento.
+    let seq: i64 = conn.query_row(
+        "SELECT COALESCE(MAX(seq), 0) + 1 FROM picks WHERE auction_id = ?1",
+        [auction_id],
+        |row| row.get(0),
+    )?;
+    let picked_at = now();
+
+    conn.execute(
+        "INSERT INTO picks (auction_id, player_id, manager_id, price, seq, picked_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![auction_id, player_id, manager_id, price, seq, picked_at],
+    )
+    .map_err(|err| match err {
+        rusqlite::Error::SqliteFailure(inner, _)
+            if inner.code == rusqlite::ErrorCode::ConstraintViolation =>
+        {
+            AppError::invalid("questo giocatore è già stato assegnato")
+        }
+        other => other.into(),
+    })?;
+
+    Ok(Pick {
+        id: conn.last_insert_rowid(),
+        auction_id,
+        player_id,
+        manager_id,
+        price,
+        seq,
+        picked_at,
+    })
+}
+
+/// Annulla l'ultima assegnazione. Sotto pressione si sbaglia partecipante o
+/// si digita un prezzo storto: deve bastare un tasto per tornare indietro.
+pub fn undo_last_pick(conn: &Connection, auction_id: i64) -> Result<Option<PickDetail>> {
+    let last = picks(conn, auction_id)?.into_iter().next_back();
+    let Some(pick) = last else {
+        return Ok(None);
+    };
+    conn.execute("DELETE FROM picks WHERE id = ?1", [pick.id])?;
+    Ok(Some(pick))
+}
+
+/// Tutte le assegnazioni dell'asta, in ordine di battuta.
+pub fn picks(conn: &Connection, auction_id: i64) -> Result<Vec<PickDetail>> {
+    let mut stmt = conn.prepare(
+        "SELECT k.id, k.player_id, p.name, p.serie_a_team, p.role, p.quotation,
+                k.manager_id, m.name, m.is_me, k.price, k.seq
+             FROM picks k
+             JOIN players p ON p.id = k.player_id
+             JOIN managers m ON m.id = k.manager_id
+             WHERE k.auction_id = ?1
+             ORDER BY k.seq",
+    )?;
+    let rows = stmt.query_map([auction_id], |row| {
+        let role: String = row.get(4)?;
+        Ok(PickDetail {
+            id: row.get(0)?,
+            player_id: row.get(1)?,
+            player_name: row.get(2)?,
+            serie_a_team: row.get(3)?,
+            role: Role::parse(&role).unwrap_or(Role::A),
+            quotation: row.get(5)?,
+            manager_id: row.get(6)?,
+            manager_name: row.get(7)?,
+            is_mine: row.get::<_, i64>(8)? != 0,
+            price: row.get(9)?,
+            seq: row.get(10)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<_>>().map_err(Into::into)
+}
+
+/// La fotografia dell'asta, ricalcolata dalle assegnazioni a ogni richiesta.
+pub fn auction_state(conn: &Connection, auction_id: i64) -> Result<AuctionState> {
+    let auction = auction(conn, auction_id)?;
+    let people = managers(conn, auction_id)?;
+    let all_picks = picks(conn, auction_id)?;
+
+    let states = people
+        .into_iter()
+        .map(|manager| {
+            let mine: Vec<&PickDetail> =
+                all_picks.iter().filter(|p| p.manager_id == manager.id).collect();
+
+            let spent: i64 = mine.iter().map(|p| p.price).sum();
+            let count = |role: Role| mine.iter().filter(|p| p.role == role).count() as i64;
+            let filled = RosterSlots {
+                p: count(Role::P),
+                d: count(Role::D),
+                c: count(Role::C),
+                a: count(Role::A),
+            };
+            // Se in un reparto si è preso più del previsto, il mancante è zero:
+            // il conto degli slot residui non deve andare in negativo.
+            let missing = RosterSlots {
+                p: (auction.slots.p - filled.p).max(0),
+                d: (auction.slots.d - filled.d).max(0),
+                c: (auction.slots.c - filled.c).max(0),
+                a: (auction.slots.a - filled.a).max(0),
+            };
+
+            let credits_left = auction.budget - spent;
+            let slots_left = missing.total();
+
+            ManagerState {
+                manager,
+                spent,
+                credits_left,
+                filled,
+                missing,
+                slots_left,
+                max_bid: budget::max_bid(credits_left, slots_left),
+                affordable_average: budget::affordable_average(credits_left, slots_left),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let total_paid: i64 = all_picks.iter().map(|p| p.price).sum();
+    let assigned_quotation: i64 = all_picks.iter().map(|p| p.quotation).sum();
+    let manager_count = states.len() as i64;
+    let expected_quotation =
+        expected_quotation(conn, auction.list_id, manager_count * auction.slots.total())?;
+
+    Ok(AuctionState {
+        picks_count: all_picks.len() as i64,
+        inflation: budget::inflation(total_paid, assigned_quotation),
+        league_inflation: budget::league_inflation(
+            auction.budget,
+            manager_count,
+            expected_quotation,
+        ),
+        auction,
+        managers: states,
+        total_paid,
+        assigned_quotation,
+    })
+}
+
+/// Quanto valgono di listino i giocatori che verranno assegnati: i più
+/// quotati della lista, tanti quanti bastano a riempire tutte le rose.
+/// Non tutto il listone finisce a qualcuno, quindi sommarlo intero
+/// falserebbe il riferimento.
+fn expected_quotation(conn: &Connection, list_id: i64, roster_places: i64) -> Result<i64> {
+    let total: i64 = conn.query_row(
+        "SELECT COALESCE(SUM(quotation), 0) FROM (
+             SELECT quotation FROM players WHERE list_id = ?1
+                 ORDER BY quotation DESC LIMIT ?2
+         )",
+        params![list_id, roster_places.max(0)],
+        |row| row.get(0),
+    )?;
+    Ok(total)
+}
+
+// ------------------------------------------------------------ preferenze
+
+/// L'asta su cui si sta lavorando, ricordata fra un avvio e l'altro.
+pub fn active_auction_id(conn: &Connection) -> Result<Option<i64>> {
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'active_auction_id'",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+    Ok(raw.and_then(|v| v.parse().ok()))
+}
+
+pub fn set_active_auction(conn: &Connection, auction_id: i64) -> Result<()> {
+    // Fallisce se l'asta non esiste, invece di ricordare un riferimento morto.
+    auction(conn, auction_id)?;
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('active_auction_id', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![auction_id.to_string()],
+    )?;
+    Ok(())
+}
+
 fn now() -> String {
     chrono::Local::now().to_rfc3339()
 }
@@ -433,6 +634,194 @@ mod tests {
             },
         );
         assert!(result.is_err());
+    }
+
+
+    /// Un'asta pronta all'uso: listone vero, 500 crediti, rosa standard,
+    /// tre partecipanti di cui il primo sono io.
+    fn asta_pronta() -> (Db, i64, Vec<Manager>, Vec<Player>) {
+        let (db, list_id) = db_con_listone();
+        let (auction_id, people, all) = {
+            let mut conn = db.0.lock().expect("mutex non avvelenato");
+            let auction = create_auction(
+                &mut conn,
+                &NewAuction {
+                    name: "Asta".into(),
+                    list_id,
+                    budget: 500,
+                    slots: RosterSlots::DEFAULT,
+                    is_simulation: false,
+                    managers: vec!["Io".into(), "Marco".into(), "Luca".into()],
+                    my_index: 0,
+                },
+            )
+            .expect("asta creata");
+            let people = managers(&conn, auction.id).expect("partecipanti letti");
+            let all = players(&conn, list_id, &PlayerFilter::default()).expect("listone letto");
+            (auction.id, people, all)
+        };
+        (db, auction_id, people, all)
+    }
+
+    #[test]
+    fn assegnare_un_giocatore_scala_crediti_e_slot() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+        let me = &people[0];
+        let attacker = all.iter().find(|p| p.role == Role::A).expect("un attaccante c'è");
+
+        assign_player(&conn, auction_id, attacker.id, me.id, 120).expect("assegnazione riuscita");
+
+        let state = auction_state(&conn, auction_id).expect("stato leggibile");
+        let mine = state.managers.iter().find(|m| m.manager.is_me).expect("ci sono io");
+        assert_eq!(mine.spent, 120);
+        assert_eq!(mine.credits_left, 380);
+        assert_eq!(mine.filled.a, 1);
+        assert_eq!(mine.missing.a, 5);
+        assert_eq!(mine.slots_left, 24);
+        // 380 crediti con 24 slot da riempire: ne posso offrire 357.
+        assert_eq!(mine.max_bid, 357);
+    }
+
+    #[test]
+    fn lo_stesso_giocatore_non_si_assegna_due_volte() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+        let player = &all[0];
+
+        assign_player(&conn, auction_id, player.id, people[0].id, 30).expect("prima assegnazione");
+        let second = assign_player(&conn, auction_id, player.id, people[1].id, 40);
+
+        let err = second.expect_err("la seconda assegnazione deve fallire");
+        assert!(
+            err.to_string().contains("già stato assegnato"),
+            "l'errore deve dire cosa è successo, non citare un vincolo SQL: {err}"
+        );
+    }
+
+    #[test]
+    fn annullare_riporta_esattamente_allo_stato_di_prima() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+
+        assign_player(&conn, auction_id, all[0].id, people[0].id, 50).expect("prima assegnazione");
+        let before = auction_state(&conn, auction_id).expect("stato leggibile");
+
+        assign_player(&conn, auction_id, all[1].id, people[1].id, 70).expect("seconda assegnazione");
+        let undone = undo_last_pick(&conn, auction_id).expect("annullamento riuscito");
+
+        let after = auction_state(&conn, auction_id).expect("stato leggibile");
+        assert_eq!(undone.map(|p| p.player_id), Some(all[1].id));
+        assert_eq!(after.picks_count, before.picks_count);
+        assert_eq!(after.total_paid, before.total_paid);
+        assert_eq!(
+            after.managers[1].credits_left, before.managers[1].credits_left,
+            "il partecipante torna ai crediti che aveva"
+        );
+    }
+
+    #[test]
+    fn annullare_a_mani_vuote_non_e_un_errore() {
+        let (db, auction_id, _, _) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+        assert!(undo_last_pick(&conn, auction_id).expect("nessun errore").is_none());
+    }
+
+    #[test]
+    fn dopo_un_annullamento_la_sequenza_non_si_sovrappone() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+
+        assign_player(&conn, auction_id, all[0].id, people[0].id, 10).expect("prima");
+        assign_player(&conn, auction_id, all[1].id, people[0].id, 10).expect("seconda");
+        undo_last_pick(&conn, auction_id).expect("annullata la seconda");
+        let third = assign_player(&conn, auction_id, all[2].id, people[0].id, 10).expect("terza");
+
+        assert_eq!(third.seq, 2, "la sequenza riprende dal posto lasciato libero");
+        let ordered = picks(&conn, auction_id).expect("lettura riuscita");
+        assert_eq!(ordered.len(), 2);
+        assert_eq!(ordered.last().map(|p| p.player_id), Some(all[2].id));
+    }
+
+    #[test]
+    fn l_inflazione_confronta_il_pagato_col_listino() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+        let player = &all[0];
+
+        // Pagato il doppio della quotazione: il mercato corre.
+        assign_player(&conn, auction_id, player.id, people[0].id, player.quotation * 2)
+            .expect("assegnazione riuscita");
+
+        let state = auction_state(&conn, auction_id).expect("stato leggibile");
+        let inflation = state.inflation.expect("con una assegnazione è definita");
+        assert!((inflation - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn sforare_il_budget_e_permesso_ma_si_vede() {
+        let (db, auction_id, people, all) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+
+        // All'asta capita di sfondare il budget: l'app lo registra invece di
+        // impedirlo, ma i crediti residui vanno in negativo e il max bid a zero.
+        assign_player(&conn, auction_id, all[0].id, people[0].id, 600).expect("registrata");
+
+        let state = auction_state(&conn, auction_id).expect("stato leggibile");
+        let mine = &state.managers[0];
+        assert_eq!(mine.credits_left, -100);
+        assert_eq!(mine.max_bid, 0);
+    }
+
+    #[test]
+    fn l_asta_attiva_si_ricorda_e_rifiuta_riferimenti_morti() {
+        let (db, auction_id, _, _) = asta_pronta();
+        let conn = db.0.lock().expect("mutex non avvelenato");
+
+        assert_eq!(active_auction_id(&conn).expect("lettura"), None);
+        set_active_auction(&conn, auction_id).expect("asta esistente");
+        assert_eq!(active_auction_id(&conn).expect("lettura"), Some(auction_id));
+        assert!(set_active_auction(&conn, 999).is_err(), "un'asta inesistente non si attiva");
+    }
+
+
+    #[test]
+    fn il_riferimento_di_lega_guarda_i_giocatori_che_verranno_assegnati() {
+        let (db, list_id) = db_con_listone();
+        let mut conn = db.0.lock().expect("mutex non avvelenato");
+        let auction = create_auction(
+            &mut conn,
+            &NewAuction {
+                name: "Lega da otto".into(),
+                list_id,
+                budget: 500,
+                slots: RosterSlots::DEFAULT,
+                is_simulation: false,
+                managers: (0..8).map(|i| format!("Team {i}")).collect(),
+                my_index: 0,
+            },
+        )
+        .expect("asta creata");
+
+        let state = auction_state(&conn, auction.id).expect("stato leggibile");
+        let reference = state.league_inflation.expect("la lega ha partecipanti");
+
+        // 8 rose da 25 fanno 200 posti: si sommano le quotazioni dei 200
+        // giocatori più cari, non tutte e 608, altrimenti il riferimento
+        // uscirebbe più basso del vero.
+        let assigned_worth = expected_quotation(&conn, list_id, 200).expect("somma leggibile");
+        let whole_listone = expected_quotation(&conn, list_id, 10_000).expect("somma leggibile");
+        assert!(assigned_worth < whole_listone, "non tutto il listone verrà assegnato");
+        assert_eq!(whole_listone, 3702, "il listone intero vale quanto ci si aspetta");
+
+        assert!(
+            (reference - 4000.0 / assigned_worth as f64).abs() < 0.001,
+            "il riferimento sono tutti i crediti della lega sulle quotazioni attese"
+        );
+        assert!(
+            (1.0..3.0).contains(&reference),
+            "un riferimento fuori da questa forbice segnala un conto sbagliato: {reference}"
+        );
     }
 
     #[test]
