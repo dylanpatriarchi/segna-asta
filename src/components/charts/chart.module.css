@@ -1,0 +1,99 @@
+/* Cornice comune a tutti i grafici: assi e griglia sono filetti sottili
+   un tono sopra la carta, mai tratteggiati, mai in primo piano. */
+
+.figure {
+  margin: 0;
+  display: grid;
+  gap: var(--s1);
+  position: relative;
+}
+
+.caption {
+  font-size: var(--t-small);
+  color: var(--ink-3);
+  max-width: 62ch;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+.axis {
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+/* Una soglia è l'unico caso in cui il tratteggio dice qualcosa:
+   "questa riga non è un dato, è un riferimento". */
+.threshold {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+/* Riferimento puntuale su una singola riga: solido, un tono sotto il dato */
+.tick {
+  stroke: var(--ink-3);
+  stroke-width: 2;
+}
+
+.tickText {
+  font-size: 10px;
+  fill: var(--ink-3);
+}
+
+.labelText {
+  font-size: 11px;
+  fill: var(--ink-2);
+}
+
+.valueText {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--ink);
+}
+
+.bar {
+  fill: var(--ink);
+}
+
+.barMuted {
+  fill: var(--ink-4);
+}
+
+.line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.hitArea {
+  fill: transparent;
+  cursor: default;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--paper);
+  padding: var(--s-half) var(--s1);
+  font-size: var(--t-small);
+  line-height: 1.35;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+
+.empty {
+  color: var(--ink-3);
+  font-size: var(--t-body);
+  padding: var(--s2) 0;
+}

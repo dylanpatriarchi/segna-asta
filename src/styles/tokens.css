@@ -17,8 +17,10 @@
 
   /* Accento: riservato a ciò che è davvero urgente */
   --accent: #e1120e;
-  /* Scostamenti: affare vs pagato troppo */
-  --gain: #1d6f4f;
+  /* Scostamenti: affare vs pagato troppo. Il verde è quello verificato
+     col validatore di palette: separazione da rosso ΔE 10.9 in protanopia,
+     e croma sopra il minimo per non leggersi come grigio. */
+  --gain: #0b7d4e;
   --loss: var(--accent);
 
   /* Scala spaziale, multipli di 8 (con mezzo passo a 4) */
