@@ -194,36 +194,6 @@ pub struct AuctionState {
     pub league_inflation: Option<f64>,
 }
 
-/// Le fasce della lista desideri, dalla più ambita alla scommessa.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Tier {
-    Top,
-    Buono,
-    Ripiego,
-    Scommessa,
-}
-
-impl Tier {
-    pub fn as_i64(self) -> i64 {
-        match self {
-            Tier::Top => 1,
-            Tier::Buono => 2,
-            Tier::Ripiego => 3,
-            Tier::Scommessa => 4,
-        }
-    }
-
-    pub fn parse(raw: i64) -> Result<Self> {
-        match raw {
-            1 => Ok(Tier::Top),
-            2 => Ok(Tier::Buono),
-            3 => Ok(Tier::Ripiego),
-            4 => Ok(Tier::Scommessa),
-            other => Err(AppError::invalid(format!("fascia sconosciuta: {other}"))),
-        }
-    }
-}
 
 /// Un obiettivo della lista desideri, con quello che serve a decidere al
 /// volo: quanto penso valga, oltre quanto non vado, e se è ancora libero.
@@ -236,7 +206,6 @@ pub struct WishEntry {
     pub serie_a_team: String,
     pub role: Role,
     pub quotation: i64,
-    pub tier: Tier,
     pub target_price: Option<i64>,
     pub max_bid: Option<i64>,
     pub priority: i64,

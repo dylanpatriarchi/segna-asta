@@ -108,17 +108,6 @@ export type AuctionState = {
   leagueInflation: number | null;
 };
 
-export type Tier = "top" | "buono" | "ripiego" | "scommessa";
-
-export const TIERS: Tier[] = ["top", "buono", "ripiego", "scommessa"];
-
-export const TIER_LABEL: Record<Tier, string> = {
-  top: "Top",
-  buono: "Buono",
-  ripiego: "Ripiego",
-  scommessa: "Scommessa",
-};
-
 export type WishEntry = {
   id: number;
   playerId: number;
@@ -126,7 +115,6 @@ export type WishEntry = {
   serieATeam: string;
   role: Role;
   quotation: number;
-  tier: Tier;
   targetPrice: number | null;
   maxBid: number | null;
   priority: number;
@@ -140,7 +128,6 @@ export type WishEntry = {
 export type WishInput = {
   auctionId: number;
   playerId: number;
-  tier: Tier;
   targetPrice: number | null;
   maxBid: number | null;
   groupLabel: string | null;

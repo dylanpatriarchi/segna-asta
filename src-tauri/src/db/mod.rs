@@ -8,7 +8,10 @@ use std::sync::Mutex;
 /// Le migrazioni, in ordine. L'indice + 1 è la versione che portano.
 /// Per evolvere lo schema si aggiunge un file in coda, mai si modifica
 /// uno già rilasciato.
-const MIGRATIONS: &[&str] = &[include_str!("schema_v1.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("schema_v1.sql"),
+    include_str!("schema_v2.sql"),
+];
 
 /// La connessione al database, condivisa fra i comandi Tauri.
 /// SQLite in-process non ha bisogno di un pool: un mutex basta e avanza.
@@ -80,6 +83,45 @@ mod tests {
         let db = Db::open_in_memory().expect("database in memoria");
         let conn = db.0.lock().expect("mutex non avvelenato");
         migrate(&conn).expect("seconda passata innocua");
+    }
+
+
+    #[test]
+    fn la_migrazione_non_butta_via_le_liste_desideri_gia_scritte() {
+        // Chi ha gia preparato la sua lista con la versione precedente non
+        // deve ritrovarsela vuota dopo un aggiornamento dell'app.
+        let conn = Connection::open_in_memory().expect("database in memoria");
+        conn.pragma_update(None, "foreign_keys", "ON").expect("vincoli attivi");
+        conn.execute_batch(MIGRATIONS[0]).expect("schema iniziale");
+        conn.pragma_update(None, "user_version", 1).expect("versione segnata");
+
+        conn.execute_batch(
+            "INSERT INTO player_lists (id, label, source_file, imported_at, player_count)
+                 VALUES (1, 'test', 'test.xlsx', '2026-08-29', 1);
+             INSERT INTO players (id, list_id, name, serie_a_team, role, quotation)
+                 VALUES (1, 1, 'Dimarco', 'Inter', 'D', 23);
+             INSERT INTO auctions (id, name, list_id, budget, slot_p, slot_d, slot_c, slot_a, created_at)
+                 VALUES (1, 'Asta', 1, 500, 3, 8, 8, 6, '2026-08-29');
+             INSERT INTO wishlist (auction_id, player_id, tier, target_price, max_bid, priority, group_label)
+                 VALUES (1, 1, 1, 30, 40, 1, 'terzini');",
+        )
+        .expect("lista desideri della versione precedente");
+
+        migrate(&conn).expect("migrazione applicata");
+
+        let (target, max_bid, group): (i64, i64, String) = conn
+            .query_row(
+                "SELECT target_price, max_bid, group_label FROM wishlist WHERE player_id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("l'obiettivo e sopravvissuto alla migrazione");
+        assert_eq!((target, max_bid, group.as_str()), (30, 40, "terzini"));
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("user_version leggibile");
+        assert_eq!(version, MIGRATIONS.len() as i64);
     }
 
     #[test]

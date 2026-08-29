@@ -1,16 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  api,
-  keys,
-  ROLES,
-  ROLE_LABEL,
-  TIERS,
-  TIER_LABEL,
-  type Player,
-  type Tier,
-  type WishEntry,
-} from "@/lib/api";
+import { api, keys, ROLES, ROLE_LABEL, type Player, type WishEntry } from "@/lib/api";
 import { useAuctionState, myState } from "@/lib/auction";
 import { Figure } from "@/components/Figure";
 import { NoAuction } from "./Listone";
@@ -72,20 +62,28 @@ export function Wishlist() {
 
       <AddTarget auctionId={state.auction.id} listId={state.auction.listId} onAdded={refresh} />
 
-      {TIERS.map((tier) => {
-        const inTier = entries.filter((e) => e.tier === tier);
-        if (inTier.length === 0) return null;
+      {ROLES.map((role) => {
+        const inRole = entries.filter((e) => e.role === role);
+        if (inRole.length === 0) return null;
+        // Contano solo gli obiettivi ancora liberi: quelli già andati a
+        // qualcuno non costano più niente, e sommarli gonfierebbe il totale.
+        const stillOpen = inRole.filter((e) => e.takenBy === null);
+        const roleTarget = stillOpen.reduce(
+          (sum, e) => sum + (e.targetPrice ?? e.quotation),
+          0,
+        );
         return (
-          <section key={tier} className={shared.block}>
+          <section key={role} className={shared.block}>
             <div className={shared.blockHead}>
-              <span className="eyebrow">{TIER_LABEL[tier]}</span>
-              <span className={shared.muted}>{inTier.length}</span>
+              <span className="eyebrow">{ROLE_LABEL[role]}</span>
+              <span className={shared.muted}>
+                {stillOpen.length} da prendere · {roleTarget} crediti di target
+              </span>
             </div>
             <table className={shared.table}>
               <thead>
                 <tr>
                   <th>Giocatore</th>
-                  <th>Ruolo</th>
                   <th className={shared.numeric}>Quot.</th>
                   <th className={shared.numeric}>Target</th>
                   <th className={shared.numeric}>Non oltre</th>
@@ -95,7 +93,7 @@ export function Wishlist() {
                 </tr>
               </thead>
               <tbody>
-                {inTier.map((entry) => (
+                {inRole.map((entry) => (
                   <WishRow
                     key={entry.id}
                     entry={entry}
@@ -112,7 +110,8 @@ export function Wishlist() {
       {entries.length === 0 && (
         <p className={shared.empty}>
           Nessun obiettivo. Aggiungi i giocatori che vuoi davvero, con quanto
-          pensi valgano e oltre quanto non vuoi andare.
+          pensi valgano e oltre quanto non vuoi andare: si dispongono da soli
+          nel loro reparto.
         </p>
       )}
     </div>
@@ -133,7 +132,6 @@ function WishRow({
       api.saveWish({
         auctionId,
         playerId: entry.playerId,
-        tier: entry.tier,
         targetPrice: entry.targetPrice,
         maxBid: entry.maxBid,
         groupLabel: entry.groupLabel,
@@ -160,9 +158,6 @@ function WishRow({
       <td className={shared.strong}>
         {entry.playerName}
         <span className={shared.muted}> · {entry.serieATeam}</span>
-      </td>
-      <td className={shared.muted} title={ROLE_LABEL[entry.role]}>
-        {entry.role}
       </td>
       <td className={`${shared.numeric} ${shared.muted}`}>{entry.quotation}</td>
       <td className={shared.numeric}>
@@ -243,7 +238,6 @@ function AddTarget({
   onAdded: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [tier, setTier] = useState<Tier>("top");
   const [group, setGroup] = useState("");
 
   const players = useQuery({
@@ -274,7 +268,6 @@ function AddTarget({
       api.saveWish({
         auctionId,
         playerId: player.id,
-        tier,
         // La quotazione è il punto di partenza: si corregge scrivendoci sopra.
         targetPrice: player.quotation,
         maxBid: null,
@@ -302,20 +295,6 @@ function AddTarget({
             if (e.key === "Enter" && suggestions[0]) add.mutate(suggestions[0]);
           }}
         />
-        <label className={shared.field}>
-          <span className={shared.label}>Fascia</span>
-          <select
-            className={shared.select}
-            value={tier}
-            onChange={(e) => setTier(e.target.value as Tier)}
-          >
-            {TIERS.map((t) => (
-              <option key={t} value={t}>
-                {TIER_LABEL[t]}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className={shared.field}>
           <span className={shared.label}>Gruppo di alternative</span>
           <input
