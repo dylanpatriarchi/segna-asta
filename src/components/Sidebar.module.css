@@ -64,3 +64,30 @@
   font-weight: 500;
 }
 
+
+.footer {
+  margin-top: auto;
+  padding: var(--s2) var(--s3) var(--s3);
+  border-top: var(--hairline) solid var(--rule);
+  display: grid;
+  gap: var(--s1);
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s1);
+}
+
+.value {
+  font-size: var(--t-lead);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: var(--tracking-tight);
+}
+
+.hint {
+  margin-top: 2px;
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}

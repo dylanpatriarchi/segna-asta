@@ -62,6 +62,52 @@ export type ImportReport = {
   totalQuotation: number;
 };
 
+export type Pick = {
+  id: number;
+  auctionId: number;
+  playerId: number;
+  managerId: number;
+  price: number;
+  seq: number;
+  pickedAt: string;
+};
+
+/** Un'assegnazione con tutto il necessario per mostrarla senza altre query. */
+export type PickDetail = {
+  id: number;
+  playerId: number;
+  playerName: string;
+  serieATeam: string;
+  role: Role;
+  quotation: number;
+  managerId: number;
+  managerName: string;
+  isMine: boolean;
+  price: number;
+  seq: number;
+};
+
+export type ManagerState = {
+  manager: Manager;
+  spent: number;
+  creditsLeft: number;
+  filled: RosterSlots;
+  missing: RosterSlots;
+  slotsLeft: number;
+  maxBid: number;
+  affordableAverage: number | null;
+};
+
+export type AuctionState = {
+  auction: Auction;
+  managers: ManagerState[];
+  picksCount: number;
+  totalPaid: number;
+  assignedQuotation: number;
+  inflation: number | null;
+  leagueInflation: number | null;
+};
+
 export type PlayerFilter = {
   search?: string;
   role?: Role;
@@ -98,4 +144,31 @@ export const api = {
   auction: (id: number) => invoke<Auction>("auction", { id }),
 
   managers: (auctionId: number) => invoke<Manager[]>("managers", { auctionId }),
+
+  assignPlayer: (auctionId: number, playerId: number, managerId: number, price: number) =>
+    invoke<Pick>("assign_player", { auctionId, playerId, managerId, price }),
+
+  undoLastPick: (auctionId: number) =>
+    invoke<PickDetail | null>("undo_last_pick", { auctionId }),
+
+  picks: (auctionId: number) => invoke<PickDetail[]>("picks", { auctionId }),
+
+  auctionState: (auctionId: number) => invoke<AuctionState>("auction_state", { auctionId }),
+
+  activeAuctionId: () => invoke<number | null>("active_auction_id"),
+
+  setActiveAuction: (auctionId: number) =>
+    invoke<void>("set_active_auction", { auctionId }),
+};
+
+/** Le chiavi delle query, in un posto solo: invalidarne una a caso è il modo
+ *  più veloce per ritrovarsi numeri vecchi a schermo durante l'asta. */
+export const keys = {
+  playerLists: ["playerLists"] as const,
+  auctions: ["auctions"] as const,
+  activeAuctionId: ["activeAuctionId"] as const,
+  auctionState: (id: number) => ["auctionState", id] as const,
+  picks: (id: number) => ["picks", id] as const,
+  players: (listId: number, filter?: PlayerFilter) => ["players", listId, filter] as const,
+  teams: (listId: number) => ["teams", listId] as const,
 };
